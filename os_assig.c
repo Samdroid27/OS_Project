@@ -30,7 +30,7 @@ bool *shmPtr;
 void *monitor_c1(){
 	pthread_mutex_lock(&mutex1);
 	 //if(shmPtr[0] && !shmPtr[1]) then child 1 runs
-        while(!(shmPtr[0] && !shmPtr[1]));
+        while(!(shmPtr[0] && !shmPtr[1]))
         {     
             	usleep(1000);
         }
@@ -41,7 +41,7 @@ void *monitor_c1(){
 void *monitor_c2(){
 	pthread_mutex_lock(&mutex2);
 		//if(!shmPtr[0] && shmPtr[1]) then child 2 runs
-        while(!(!shmPtr[0] && shmPtr[1]));
+        while(!(!shmPtr[0] && shmPtr[1]))
         {  
             	usleep(1000);
         }
@@ -53,7 +53,7 @@ void *monitor_c2(){
 void *monitor_c3(){
 	pthread_mutex_lock(&mutex3);
 //if(!shmPtr[0] && !shmPtr[1]) then child 3 runs
-    while(!(!shmPtr[0] && !shmPtr[1]));            
+    while(!(!shmPtr[0] && !shmPtr[1]))         
     {   
 	    usleep(1000);
   
@@ -65,35 +65,35 @@ void *monitor_c3(){
 
 void *add_nums(void *p){
  	int *param = (int *)p;
- 	pthread_mutex_lock(&mutex);
+ 	pthread_mutex_lock(&mutex1);
  	//while(!condition)
-		pthread_cond_wait(&cond, &mutex);
+		pthread_cond_wait(&cond1, &mutex1);
 	//do_addition of numbers from 1 to n1
 	// when done,return result to parent process via pipe1
 
-	pthread_mutex_unlock(&mutex);
+	pthread_mutex_unlock(&mutex1);
  	
 }
 
 void *read_nums(void *p){
  	int *param = (int *)p;
- 	pthread_mutex_lock(&mutex);
+ 	pthread_mutex_lock(&mutex2);
 	//while(!condition)
-		pthread_cond_wait(&cond, &mutex);
+		pthread_cond_wait(&cond2, &mutex2);
 	//do_reading of n2 numbers from input file
 	//when done,print done_reading on the console
-	pthread_mutex_unlock(&mutex);
+	pthread_mutex_unlock(&mutex2);
  	
 }
 
 void *read_add_nums(void *p){
  	int *param = (int *)p;
- 	pthread_mutex_lock(&mutex);
+ 	pthread_mutex_lock(&mutex3);
 	//while(!condition)
-		pthread_cond_wait(&cond, &mutex);
+		pthread_cond_wait(&cond3, &mutex3);
 	//do_reading of n3 numbers from input file and add them 
 	// when done,return result to parent process via pipe3
-	pthread_mutex_unlock(&mutex);
+	pthread_mutex_unlock(&mutex3);
  	
 }
 
@@ -186,9 +186,11 @@ void fcfs(int n1,int n2,int n3){
             exit(2);
         }
         
-         pthread_create(&computation_thread[0], &at[0], add_nums, n1);
+         
          pthread_create(&monitor_thread[0], &at[0], monitor_c1, NULL);
-
+         pthread_create(&computation_thread[0], &at[0], add_nums, n1);
+         pthread_join(computation_thread[0], NULL);
+         pthread_join(monitor_thread[0], NULL);
 
        
 
@@ -214,11 +216,13 @@ void fcfs(int n1,int n2,int n3){
                     perror("error in shmat in child1");
                     exit(2);
                 }
-                 pthread_create(&computation_thread[1], &at[1], read_nums, n1);
                  pthread_create(&monitor_thread[1], &at[1], monitor_c2, NULL);
+                 pthread_create(&computation_thread[1], &at[1], read_nums, n1);
+                 pthread_join(computation_thread[1], NULL);
+         	     pthread_join(monitor_thread[1], NULL);
                 
 
-                //create 2 threads here
+               
             }
             else
             { 
@@ -241,17 +245,13 @@ void fcfs(int n1,int n2,int n3){
                         perror("error in shmat in child1");
                         exit(2);
                     }
+                    pthread_create(&monitor_thread[2], &at[2], monitor_c3, NULL);
 					pthread_create(&computation_thread[2], &at[2], read_add_nums, n3);
-                	pthread_create(&monitor_thread[2], &at[2], monitor_c3, NULL);
-                    //if(!shmPtr[0] && !shmPtr[1]) then child 3 runs
-                    while(!(!shmPtr[0] && !shmPtr[1]));
-                    
-                    {
-                        //child 3 code here
-                        printf("Child3 running\n");
-                    }
-
-                    //create 2 threads here  
+                	
+                   
+					pthread_join(computation_thread[2], NULL);
+         			pthread_join(monitor_thread[2], NULL);
+                  
                 }
                 else
                 {
@@ -273,6 +273,7 @@ void fcfs(int n1,int n2,int n3){
                     printf("Parent writing");
                     shmPtr[0] = true;
                     shmPtr[1] = false;
+                    
                     wait(NULL);
 
                     shmPtr[0] = false;
