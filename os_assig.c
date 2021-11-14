@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include<time.h>
 
 #define READ 0
 #define WRITE 1
@@ -26,7 +27,7 @@ pthread_mutex_t mutex3 = PTHREAD_MUTEX_INITIALIZER;
 
 //bool flags to tell monitor when to allow computaion
 bool *shmPtr; 
-int l1=1,l2=1,l3=1;
+int l1 = 1, l2=1,l3=1;
 
 // void *monitor_c1(){
 //     printf("inside monitor c1\n");
@@ -82,8 +83,19 @@ void *add_nums(void *p){
     {
         l1 = 2;
         pthread_cond_wait(&cond1, &mutex1);
+        clock_t t;
+        t = clock();
         printf("Child 1 running\n");
-        printf("Child1 completed\n");
+        long long sum = 0;
+        
+        for(int i=1; i<= *param; i++)
+        {
+        	sum += i;
+        }
+        t = clock() - t;
+        double tt = ((double)t);
+        printf("Child 1 completed after %lf microseconds\n", tt);
+        return (void *)sum;
     }
     else
     {
@@ -110,8 +122,35 @@ void *read_nums(void *p){
     {
         l2 = 2;
         pthread_cond_wait(&cond2, &mutex2);
+        clock_t t;
+        t = clock();
         printf("Child 2 running\n");
+        
+        FILE *fp;
+        if((fp=fopen("second.txt", "r"))==NULL)
+        {
+        	printf("Error: Cannot open the file\n");
+        	exit(EXIT_FAILURE);
+        }
+        else
+        {
+        	printf("Numbers in the file are: ");
+        	char num[10];
+        	
+        	for(int i=1; i<= *param; i++)
+        	{
+        		fgets(num, 100, fp);
+        		int val = atoi(num);
+        		printf("%d\t", val);
+        	}
+        	printf("\n");
+        	
+        }
+        fclose(fp);
         printf("Child 2 completed\n");
+        t = clock() - t;
+        double tt = ((double)t);
+        printf("Child 2 completed after %lf microseconds\n", tt);
     }
     else
     {
@@ -138,8 +177,33 @@ void *read_add_nums(void *p){
     {
         l3 = 2;
         pthread_cond_wait(&cond3, &mutex3);
+        clock_t t;
+        t = clock();
         printf("Child 3 running\n");
+        FILE *fp;
+        long long sum = 0;
+        
+        if((fp=fopen("third.txt", "r"))==NULL)
+        {
+        	printf("Error: Cannot open the file\n");
+        	exit(EXIT_FAILURE);
+        }
+        else
+        {
+        	char num[10];
+        	for(int i=1; i<= *param; i++)
+        	{
+        		fgets(num, 100, fp);
+        		int val = atoi(num);
+        		sum += val;
+        	}
+        }
+        fclose(fp);
         printf("Child 3 completed\n");
+        t = clock() - t;
+        double tt = ((double)t);
+        printf("Child 3 completed after %lf microseconds\n", tt);
+        return (void *)sum;
     }
     else
     {
@@ -237,7 +301,7 @@ void fcfs(int n1,int n2,int n3){
  	int p1 = pipe(pfd1);
  	child_c1 = fork();
 	if(child_c1 == 0)
-    { 
+    	{ 
         //Child_c1 process
         
         sleep(1);
@@ -255,12 +319,21 @@ void fcfs(int n1,int n2,int n3){
         }
         
         // printf("before thread creation c1\n");
-        pthread_create(&monitor_thread[0], &at[0], add_nums, n1);
-        pthread_create(&computation_thread[0], &at[0], add_nums, n1);
+        
+	void *result1;
+        
+        pthread_create(&computation_thread[0], &at[0], add_nums, &n1);
+        usleep(200);
+        pthread_create(&monitor_thread[0], &at[1], add_nums, &n1);
         // printf("after thread creation c1\n");
-        pthread_join(computation_thread[0], NULL);
+        pthread_join(computation_thread[0], &result1);
         pthread_join(monitor_thread[0], NULL);
-
+        long long result = (long long)result1;
+        
+        //passing the result to parent through pipe pfd1
+	close(pfd1[0]);
+	write(pfd1[1], &result, sizeof(result));
+	close(pfd1[1]);
        
 
     }
@@ -288,12 +361,16 @@ void fcfs(int n1,int n2,int n3){
                     exit(2);
                 }
                 // printf("before thread creation c2\n");
-                pthread_create(&monitor_thread[1], &at[1], read_nums, n2);
-                pthread_create(&computation_thread[1], &at[1], read_nums, n2);
+                pthread_create(&monitor_thread[1], &at[3], read_nums, &n2);
+                pthread_create(&computation_thread[1], &at[2], read_nums, &n2);
                 // printf("after thread creation c2\n");
                 pthread_join(computation_thread[1], NULL);
                 pthread_join(monitor_thread[1], NULL);
                 
+                //passing message to parent through pfd2
+                close(pfd2[0]);
+                write(pfd2[1], "Done Printing", 14);
+                close(pfd2[1]);
 
                
             }
@@ -323,12 +400,21 @@ void fcfs(int n1,int n2,int n3){
 
                     // printf("before thread creation c2\n");
 
-                    pthread_create(&monitor_thread[2], &at[2], read_add_nums, n3);
-					pthread_create(&computation_thread[2], &at[2], read_add_nums, n3);
+			pthread_create(&computation_thread[2], &at[4], read_add_nums, &n3);
+			usleep(200);
+                    pthread_create(&monitor_thread[2], &at[5], read_add_nums, &n3);
+					
                 	// printf("after thread creation c3\n");
                    
-					pthread_join(computation_thread[2], NULL);
+                   void *result2;
+					pthread_join(computation_thread[2], &result2);
          			pthread_join(monitor_thread[2], NULL);
+                  long long result3 = (long long)result2;
+                  
+                  //passing result from child 3 to parent through pfd3 pipe
+                  close(pfd3[0]);
+                  write(pfd3[1], &result3, sizeof(result3));
+                  close(pfd3[1]);
                   
                 }
                 else
@@ -354,16 +440,33 @@ void fcfs(int n1,int n2,int n3){
                     
                     shmPtr[0] = true;
                     shmPtr[1] = false;
+                    //receiving result from child1 through pipe pfd1
+                    long long buf;
+                    close(pfd1[1]);
+                    read(pfd1[0], &buf, 64);
+                    close(pfd1[0]);
+                    printf("Result of Child 1 : %lld\n", buf);
                     // printf("over here\n");
                     wait(NULL);
 
                     shmPtr[0] = false;
                     shmPtr[1] = true;
+                    //receiving message from child2 through pipe pfd2
+                    char buf1[14];
+                    close(pfd2[1]);
+                    read(pfd2[0], buf1, 14);
+                    printf("Child 2 has sent the message: \"%s\"\n", buf1);
+                    close(pfd2[0]);
                     wait(NULL);
 
                     shmPtr[0] = false;
                     shmPtr[1] = false;
-
+                    //receiving message from child3 through pipe pfd3
+                    long long buf2;
+                    close(pfd3[1]);
+                    read(pfd3[0], &buf2, 64);
+                    close(pfd3[0]);
+                    printf("Result of Child 3 : %lld\n", buf2);
                     wait(NULL);
                     
                     //fcfs scheduling here
